@@ -1,0 +1,319 @@
+#include "Wire.h"
+#include <MPU6050_light.h>
+MPU6050 mpu(Wire);
+
+//For Calculations
+float x = 50;
+float y = 50;
+
+float distance = sqrt(x*x+y*y);
+float timeNeeded = (distance/22.5)*1000;
+float timee = 0;
+
+int align_cnt = 0;
+
+float offSetAngle = 0;
+
+//For IR sensors
+int centerIR;
+int leftIR;
+int rightIR;
+int leftFlag;
+int centerFlag;
+int rightFlag;
+
+//For Wheels
+int rb = 6;
+int rf = 9;
+int lf = 10;
+int lb = 11;
+
+//Functions
+float m = 0;
+void align();
+void forward(int t);
+void reverse(int t);
+void turnRight(int deg);
+void turnLeft(int deg);
+void stopp();
+
+void obsRight();
+void obsLeft();
+void obsCenter();
+
+float angle();
+void setup() {
+  Serial.begin(9600);
+  pinMode(lf,OUTPUT);
+  pinMode(lb,OUTPUT);
+  pinMode(rb,OUTPUT);
+  pinMode(rf,OUTPUT);
+  
+  digitalWrite(lf,LOW);
+  digitalWrite(rf,LOW);
+  digitalWrite(lb,LOW);
+  digitalWrite(rb,LOW);
+
+
+  //Gyroscope
+  Wire.begin();
+  byte status = mpu.begin();
+  Serial.print(F("MPU6050 status: "));
+  Serial.println(status);
+  while(status!=0){ } // stop everything if could not connect to MPU6050
+  Serial.println(F("Calculating offsets, do not move MPU6050"));
+  delay(1000);
+  mpu.calcOffsets(); // gyro and accelero
+  Serial.println("Done!\n");
+  //turn_here
+  
+}
+
+void loop() {
+  if(align_cnt == 0){
+    align(x,y);
+    Serial.println(timeNeeded);
+    delay(2000);
+    align_cnt = 1;
+    }
+
+  while(timee < timeNeeded){
+
+    leftIR = analogRead(A1);
+    centerIR = analogRead(A2);
+    rightIR = analogRead(A3);
+    if (leftIR < 200){leftFlag = 1;}
+    else{leftFlag = 0;}
+    if (rightIR < 200){rightFlag = 1;}
+    else{rightFlag = 0;}
+    if (centerIR < 200){centerFlag = 1;}
+    else{centerFlag = 0;}
+
+    if(rightFlag == 1){
+      stopp();
+      Serial.println("Obstacle on Right");
+      
+      obsRight();
+      }
+    else if(leftFlag == 1){
+      stopp();
+      Serial.println("Obstacle on Right");
+      
+      obsLeft();
+      }
+    else if(centerFlag == 1){
+      stopp();
+      Serial.println("Obstacle on Right");
+      
+      obsCenter();
+      }
+    else{
+      analogWrite(rf,100);
+      analogWrite(lf,100);
+      delay(1);
+      timee = timee + 1;
+      }
+    
+    }
+  Serial.println("The trip is over");
+  digitalWrite(lf,LOW);
+  digitalWrite(rf,LOW);
+  digitalWrite(lb,LOW);
+  digitalWrite(rb,LOW);
+
+}
+// Loop ends here
+
+// Functions are Defined
+void forward(int t){
+
+  if((timee+t) > timeNeeded){
+    analogWrite(rf,100);
+    analogWrite(lf,100);
+    delay(timeNeeded - timee);
+    analogWrite(rf,0);
+    analogWrite(lf,0);
+    timee = timeNeeded;
+    }else{
+      analogWrite(rf,100);
+      analogWrite(lf,100);
+      delay(t);
+      analogWrite(rf,0);
+      analogWrite(lf,0);
+      timee = timee + t;
+      }
+  
+  }
+
+float angle(){
+  mpu.update();
+  float ang = mpu.getAngleZ();
+  return ang;
+}
+
+void turnLeft(int deg){
+  deg = deg+offSetAngle-2;
+  while(m < deg){
+    analogWrite(rf , 70);
+    m = angle();
+    Serial.print("Angle: ");
+    Serial.println(m-offSetAngle);
+    delay(10);
+    
+    }
+  digitalWrite(lf,LOW);
+  digitalWrite(rf,LOW);
+  digitalWrite(lb,LOW);
+  digitalWrite(rb,LOW);
+  Serial.print("Angle Now is: ");
+  Serial.println(angle());
+  
+  }
+
+void turnRight(int deg){
+  deg = deg+offSetAngle+2;
+  while(m > deg){
+    analogWrite(lf , 70);
+    m = angle();
+    Serial.print("Angle: ");
+    Serial.println(m-offSetAngle);
+    delay(10);
+    }
+  digitalWrite(lf,LOW);
+  digitalWrite(rf,LOW);
+  digitalWrite(lb,LOW);
+  digitalWrite(rb,LOW);
+  Serial.print("Angle Now is: ");
+  Serial.println(angle());
+  }
+
+
+
+
+void obsRight(){
+  reverse(400);
+  turnLeft(30);
+  delay(200);
+  forward(400);
+  delay(200);
+  turnRight(0);
+  delay(200);
+  forward(400);
+  delay(200);
+  turnRight(-30);
+  delay(200);
+  forward(400);
+  delay(200);
+  turnLeft(0);
+  }
+void obsLeft(){
+  reverse(400);
+  turnRight(-30);
+  delay(200);
+  forward(400);
+  delay(200);
+  turnLeft(0);
+  delay(200);
+  forward(400);
+  delay(200);
+  turnLeft(30);
+  delay(200);
+  forward(400);
+  delay(200);
+  turnRight(0);
+  
+  }
+void obsCenter(){
+  reverse(200);
+  turnLeft(40);
+  delay(200);
+  forward(400);
+  delay(200);
+  turnRight(0);
+  delay(200);
+  forward(400);
+  delay(200);
+  turnRight(-40);
+  delay(200);
+  forward(400);
+  delay(200);
+  turnLeft(0);
+  
+  }
+
+
+
+
+
+void align(float x, float y){
+
+  float r = y/x;
+  float angle = atan(r)*180/PI;
+  Serial.println(r);
+  
+  
+  if(x > 0){
+    if(r > 0){
+      //turnLeft(angle);
+      Serial.print("Turning Left by: ");
+      Serial.println(angle);
+      turnLeft(angle);
+      offSetAngle=angle;
+      }
+    else if(r<0){
+      Serial.print("Turning Right by: ");
+      turnRight(angle);
+      Serial.println(angle);
+      offSetAngle=angle;
+      }
+    }
+   else if(x<0){
+    if(r > 0){
+      //turnRight(angle-PI);
+      Serial.print("Turning Right by: ");
+      Serial.println(angle-180);
+      turnRight(angle-180);
+      offSetAngle=angle-180;
+      }
+    else if(r<0){
+      Serial.print("Turning Left by: ");
+      Serial.println(180+angle);
+      turnLeft(angle+180);
+      offSetAngle=angle+180;
+      }
+    }
+    else if(x<0 && y==0){
+      Serial.print("Turning Left by: ");
+      Serial.println(180);
+      turnLeft(angle);
+      }
+    else if(x==0 && y>0){
+      Serial.print("Turning Left by: ");
+      Serial.println(90);
+      turnLeft(angle);
+      }
+
+    else if(x==0 && y<0){
+      Serial.print("Turning Right by: ");
+      Serial.println(-90);
+      turnRight(angle);
+      }
+  }
+
+
+void stopp(){
+
+  digitalWrite(lf,LOW);
+  digitalWrite(rf,LOW);
+  digitalWrite(lb,LOW);
+  digitalWrite(rb,LOW);
+  delay(2000);
+  }
+
+void reverse(int t){
+  analogWrite(rb,100);
+  analogWrite(lb,100);
+  delay(t);
+  analogWrite(rb,0);
+  analogWrite(lb,0);
+  }
